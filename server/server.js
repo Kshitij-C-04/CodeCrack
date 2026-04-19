@@ -14,26 +14,33 @@ dotenv.config();
 const app = express();
 
 
-// ✅ FIXED CORS (VERY IMPORTANT)
+// ✅ CORS (UPDATED FOR LOCAL + PRODUCTION)
 app.use(cors({
-    origin: "http://localhost:3000", // ⚠️ change if your frontend port is different
+    origin: [
+        "http://localhost:3000",              // local dev
+        "http://localhost:5173",              // vite dev
+        process.env.FRONTEND_URL             // production (Vercel)
+    ],
     credentials: true
 }));
 
-// ✅ ALLOW AUTH HEADER (IMPORTANT)
+
+// ✅ ALLOW AUTH HEADER
 app.use((req, res, next) => {
     res.header("Access-Control-Allow-Headers", "Authorization, Content-Type");
     next();
 });
 
+
 // ✅ BODY PARSER
 app.use(express.json());
 
-// ✅ CLERK AUTH (DO NOT MOVE ABOVE CORS)
+
+// ✅ CLERK AUTH (KEEP AFTER CORS)
 app.use(clerkMiddleware());
 
 
-// ✅ GLOBAL DEBUG LOGGER
+// ✅ DEBUG LOGGER
 app.use((req, res, next) => {
     console.log("📡", req.method, req.url);
     next();
@@ -46,24 +53,13 @@ app.get("/test", (req, res) => {
 });
 
 
-// ✅ ROUTES (UNCHANGED)
+// ✅ ROUTES
 app.use("/api/problems", problemRoutes);
 app.use("/api/submission", submissionRoutes);
 app.use("/api/users", userRoutes);
 
 
-// ✅ DB CONNECT
-mongoose.connect(process.env.MONGO_URI)
-    .then(() => {
-        console.log("✅ MongoDB Connected");
-        console.log("📦 DB NAME:", mongoose.connection.name);
-    })
-    .catch(err => {
-        console.error("❌ DB ERROR:", err);
-    });
-
-
-// 🔥 DEBUG ROUTE (UNCHANGED)
+// ✅ DEBUG ROUTE
 app.get("/debug/problems", async (req, res) => {
     try {
         const Problem = (await import("./models/Problem.js")).default;
@@ -79,7 +75,20 @@ app.get("/debug/problems", async (req, res) => {
 });
 
 
-// ✅ START SERVER
-app.listen(5000, () => {
-    console.log("🔥 Server running on http://localhost:5000");
+// ✅ DB CONNECT
+mongoose.connect(process.env.MONGO_URI)
+    .then(() => {
+        console.log("✅ MongoDB Connected");
+        console.log("📦 DB NAME:", mongoose.connection.name);
+    })
+    .catch(err => {
+        console.error("❌ DB ERROR:", err);
+    });
+
+
+// ✅ START SERVER (FIXED)
+const PORT = process.env.PORT || 5000;
+
+app.listen(PORT, () => {
+    console.log(`🔥 Server running on port ${PORT}`);
 });
