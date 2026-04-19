@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 
+// ✅ TEST CASE SCHEMA
 const testCaseSchema = new mongoose.Schema({
     input: {
         type: String,
@@ -11,6 +12,7 @@ const testCaseSchema = new mongoose.Schema({
     }
 }, { _id: false });
 
+// ✅ MAIN PROBLEM SCHEMA
 const problemSchema = new mongoose.Schema({
     title: {
         type: String,
@@ -18,30 +20,28 @@ const problemSchema = new mongoose.Schema({
     },
     description: {
         type: String,
-        required: true
+        default: ""
     },
 
-    // 🔥 MODE
     mode: {
         type: String,
-        enum: ["bug", "output", "puzzle"],
-        required: true
+        required: true,
+        enum: ["bug", "output", "puzzle"]
     },
 
     difficulty: {
         type: String,
-        enum: ["easy", "medium", "hard"],
-        required: true
+        default: "easy"
     },
 
-    // ✅ 🔥 ADD THIS (CRITICAL FIX)
+    // 🔥 LANGUAGE SUPPORT (IMPORTANT)
     language: {
         type: String,
-        enum: ["javascript", "python", "sql"],
-        default: "javascript"
+        default: "javascript",
+        enum: ["javascript", "python", "sql"]
     },
 
-    // 🐞 BUG MODE
+    // 🔧 BUG MODE
     buggyCode: {
         type: String,
         default: ""
@@ -51,7 +51,7 @@ const problemSchema = new mongoose.Schema({
         default: ""
     },
 
-    // 🧠 OUTPUT MODE
+    // 🔥 OUTPUT MODE
     code: {
         type: String,
         default: ""
@@ -61,13 +61,13 @@ const problemSchema = new mongoose.Schema({
         default: ""
     },
 
-    // 🧩 PUZZLE MODE
+    // 🔥 PUZZLE MODE
     functionSignature: {
         type: String,
         default: ""
     },
 
-    // ✅ SQL + EXTRA FIELDS
+    // 🔧 OPTIONAL FIELDS
     schema: {
         type: String,
         default: ""
@@ -85,30 +85,27 @@ const problemSchema = new mongoose.Schema({
         default: ""
     },
 
-    // 🎮 XP LOGIC
     xp: {
         type: Number,
-        default: function () {
-            if (this.difficulty === "easy") return 10;
-            if (this.difficulty === "medium") return 20;
-            return 30;
-        }
+        default: 10
     },
 
-    // 🧪 TEST CASES
+    // ✅ TEST CASES
     testCases: {
         type: [testCaseSchema],
         default: []
     },
+
     hiddenTestCases: {
         type: [testCaseSchema],
         default: []
-    },
-
-    createdAt: {
-        type: Date,
-        default: Date.now
     }
+
+}, {
+    timestamps: true // ✅ useful for future (no breaking)
 });
 
-export default mongoose.model("Problem", problemSchema);
+// ✅ FORCE COLLECTION NAME = "problems"
+const Problem = mongoose.model("Problem", problemSchema, "problems");
+
+export default Problem;

@@ -3,42 +3,83 @@ import mongoose from "mongoose";
 import cors from "cors";
 import dotenv from "dotenv";
 
-import submissionRoutes from "./routes/submission.js";
-import leaderboardRoutes from "./routes/leaderboard.js";
-import userRoutes from "./routes/user.js";
-import problemRoutes from "./routes/problemRoutes.js";
+import { clerkMiddleware } from "@clerk/express";
 
+import problemRoutes from "./routes/problemRoutes.js";
+import submissionRoutes from "./routes/submission.js";
+import userRoutes from "./routes/user.js";
 
 dotenv.config();
 
 const app = express();
 
-app.use(cors());
+
+// ✅ FIXED CORS (VERY IMPORTANT)
+app.use(cors({
+    origin: "http://localhost:3000", // ⚠️ change if your frontend port is different
+    credentials: true
+}));
+
+// ✅ ALLOW AUTH HEADER (IMPORTANT)
+app.use((req, res, next) => {
+    res.header("Access-Control-Allow-Headers", "Authorization, Content-Type");
+    next();
+});
+
+// ✅ BODY PARSER
 app.use(express.json());
 
-console.log("🚀 SERVER RUNNING");
+// ✅ CLERK AUTH (DO NOT MOVE ABOVE CORS)
+app.use(clerkMiddleware());
 
-// ✅ CORRECT ROUTE MOUNT
+
+// ✅ GLOBAL DEBUG LOGGER
+app.use((req, res, next) => {
+    console.log("📡", req.method, req.url);
+    next();
+});
+
+
+// ✅ TEST ROUTE
+app.get("/test", (req, res) => {
+    res.send("BACKEND WORKING ✅");
+});
+
+
+// ✅ ROUTES (UNCHANGED)
 app.use("/api/problems", problemRoutes);
-
 app.use("/api/submission", submissionRoutes);
-app.use("/api/leaderboard", leaderboardRoutes);
-app.use("/api/user", userRoutes);
+app.use("/api/users", userRoutes);
 
 
-// TEST
-app.get("/", (req, res) => {
-    res.send("API WORKING");
-});
-
-// DB CONNECT
+// ✅ DB CONNECT
 mongoose.connect(process.env.MONGO_URI)
-    .then(() => console.log("✅ MongoDB Connected"))
-    .catch(err => console.log(err));
+    .then(() => {
+        console.log("✅ MongoDB Connected");
+        console.log("📦 DB NAME:", mongoose.connection.name);
+    })
+    .catch(err => {
+        console.error("❌ DB ERROR:", err);
+    });
 
-mongoose.connection.once("open", () => {
-    console.log("📦 DB NAME:", mongoose.connection.name);
+
+// 🔥 DEBUG ROUTE (UNCHANGED)
+app.get("/debug/problems", async (req, res) => {
+    try {
+        const Problem = (await import("./models/Problem.js")).default;
+        const problems = await Problem.find();
+
+        res.json({
+            count: problems.length,
+            sample: problems[0] || null
+        });
+    } catch (err) {
+        res.json({ error: err.message });
+    }
 });
 
-// SERVER
-app.listen(5000, () => console.log("🔥 Server running on port 5000"));
+
+// ✅ START SERVER
+app.listen(5000, () => {
+    console.log("🔥 Server running on http://localhost:5000");
+});

@@ -5,10 +5,11 @@ import Problem from "./models/Problem.js";
 
 dotenv.config();
 
-console.log("MONGO URI:", process.env.MONGO_URI);
-
 async function seedDB() {
         try {
+                // 🔥 VERY IMPORTANT (to debug DB mismatch)
+                console.log("SEED DB:", process.env.MONGO_URI);
+
                 await mongoose.connect(process.env.MONGO_URI);
                 console.log("✅ MongoDB Connected");
 
@@ -20,22 +21,23 @@ async function seedDB() {
                 console.log("Problems loaded:", rawData.length);
 
                 // 🧹 CLEAR OLD DATA
-                await Problem.deleteMany();
+                await Problem.deleteMany({});
                 console.log("Old data cleared");
 
-                // ✅ 🔥 CLEAN DATA (CRITICAL FIX)
+                // ✅ DIRECT CLEAN INSERT (NO MODIFICATION LOGIC)
                 const cleanedData = rawData.map((p) => ({
-                        title: p.title,
-                        description: p.description,
-                        mode: p.mode,
-                        difficulty: p.difficulty,
+                        title: p.title || "",
+                        description: p.description || "",
+                        mode: p.mode || "",
+                        difficulty: p.difficulty || "easy",
 
                         buggyCode: p.buggyCode || "",
                         correctCode: p.correctCode || "",
 
+                        // 🔥 IMPORTANT: take code EXACTLY from JSON
                         code: p.code || "",
-                        answer: p.answer || "",
 
+                        answer: p.answer || "",
                         functionSignature: p.functionSignature || "",
 
                         schema: p.schema || "",
@@ -43,33 +45,35 @@ async function seedDB() {
                         exampleOutput: p.exampleOutput || "",
                         hint: p.hint || "",
 
-                        xp: p.xp,
+                        xp: p.xp || 10,
 
-                        // ✅ SAFE TEST CASE HANDLING
                         testCases: Array.isArray(p.testCases)
-                            ? p.testCases
-                                .filter(tc => tc && tc.output !== undefined)
-                                .map(tc => ({
-                                        input: tc.input || "",
-                                        output: String(tc.output)
-                                }))
+                            ? p.testCases.map(tc => ({
+                                    input: tc.input || "",
+                                    output: String(tc.output)
+                            }))
                             : [],
 
                         hiddenTestCases: Array.isArray(p.hiddenTestCases)
-                            ? p.hiddenTestCases
-                                .filter(tc => tc && tc.output !== undefined)
-                                .map(tc => ({
-                                        input: tc.input || "",
-                                        output: String(tc.output)
-                                }))
+                            ? p.hiddenTestCases.map(tc => ({
+                                    input: tc.input || "",
+                                    output: String(tc.output)
+                            }))
                             : []
                 }));
 
-                // 🚀 INSERT CLEAN DATA
+                // 🧪 DEBUG: check one output problem BEFORE insert
+                const sampleOutput = cleanedData.find(p => p.mode === "output");
+                console.log("CHECK OUTPUT BEFORE INSERT:", sampleOutput);
+
                 await Problem.insertMany(cleanedData);
 
                 const count = await Problem.countDocuments();
                 console.log("Inserted:", count);
+
+                // 🧪 DEBUG AFTER INSERT
+                const checkDB = await Problem.findOne({ mode: "output" });
+                console.log("CHECK OUTPUT IN DB:", checkDB);
 
                 console.log("🚀 Seeding complete!");
                 process.exit();

@@ -1,19 +1,96 @@
 import express from "express";
-import User from "../models/User.js";
 import Problem from "../models/Problem.js";
-import { getRank } from "../utils/rank.js";
-import { runCode } from "../utils/judge0.js";
+import User from "../models/User.js";
+import fs from "fs";
+import path from "path";
+import { exec } from "child_process";
 
 const router = express.Router();
 
+// Rank function
+const getRank = (xp) => {
+    if (xp >= 1500) return "Diamond";
+    if (xp >= 1200) return "Platinum";
+    if (xp >= 1000) return "Gold III";
+    if (xp >= 850) return "Gold II";
+    if (xp >= 700) return "Gold I";
+    if (xp >= 550) return "Silver III";
+    if (xp >= 400) return "Silver II";
+    if (xp >= 250) return "Silver I";
+    if (xp >= 150) return "Bronze III";
+    if (xp >= 75) return "Bronze II";
+    return "Bronze I";
+};
+
+// normalize (UNCHANGED)
+const normalize = (val) => {
+    if (Array.isArray(val)) return val.join("");
+    return String(val).replace(/[\s,]+/g, "");
+};
+
+// ✅ FINAL PYTHON RUNNER (FIXED PROPERLY)
+const runPython = (code, input) => {
+    return new Promise((resolve, reject) => {
+        const filePath = path.join(process.cwd(), "temp.py");
+
+        const wrappedCode = `
+import sys
+import json
+
+${code}
+
+if __name__ == "__main__":
+    data = json.loads(sys.stdin.read())
+
+    if isinstance(data, list):
+        result = solution(*data)
+    else:
+        result = solution(data)
+
+    if result is None:
+        print("null")
+    else:
+        print(result)
+`;
+
+        fs.writeFileSync(filePath, wrappedCode);
+
+        const process = exec(`python ${filePath}`, (err, stdout, stderr) => {
+            fs.unlinkSync(filePath);
+
+            if (err) return reject(stderr || err.message);
+
+            resolve(stdout.trim());
+        });
+
+        // ✅ PASS INPUT SAFELY
+        try {
+            let parsed;
+
+            if (typeof input === "string") {
+                if (input.includes(",")) {
+                    parsed = input.split(",").map(i => JSON.parse(i));
+                } else {
+                    parsed = JSON.parse(input);
+                }
+            } else {
+                parsed = input;
+            }
+
+            process.stdin.write(JSON.stringify(parsed));
+            process.stdin.end();
+
+        } catch (e) {
+            process.stdin.write(JSON.stringify(input));
+            process.stdin.end();
+        }
+    });
+};
+
 router.post("/", async (req, res) => {
     try {
-        console.log("🔥 HIT /api/submission");
+        const { code, problemId, clerkId, score, mode } = req.body;
 
-        const clerkId = req.auth?.userId;
-        const { code, language_id, problemId } = req.body;
-
-        // ✅ VALIDATION
         if (!code || !problemId) {
             return res.status(400).json({
                 success: false,
@@ -21,7 +98,6 @@ router.post("/", async (req, res) => {
             });
         }
 
-        // ✅ FETCH PROBLEM
         const problem = await Problem.findById(problemId);
 
         if (!problem) {
@@ -31,123 +107,188 @@ router.post("/", async (req, res) => {
             });
         }
 
-        if (!problem.testCases || problem.testCases.length === 0) {
-            return res.status(500).json({
-                success: false,
-                message: "No test cases found"
+        // ================= OUTPUT MODE =================
+        if (mode === "output") {
+            let output;
+
+            try {
+                const func = new Function(`
+                    ${problem.code}
+
+                    if (typeof solution === "function") return solution();
+                    if (typeof main === "function") return main();
+
+                    throw new Error("No function found");
+                `);
+
+                output = await func();
+            } catch (err) {
+                return res.json({
+                    success: false,
+                    error: err.message
+                });
+            }
+
+            const clean = (val) =>
+                String(val).trim().replace(/[\n\r]+/g, "");
+
+            if (clean(String(code)) !== clean(String(output))) {
+                return res.json({
+                    success: false,
+                    expected: output,
+                    got: code
+                });
+            }
+
+            let user = null;
+            let xpGain = 0;
+
+            if (clerkId) {
+                user = await User.findOne({ clerkId });
+
+                if (!user) {
+                    user = new User({
+                        clerkId,
+                        xp: 0,
+                        problemsSolved: [],
+                        highestScore: 0,
+                        rank: "Bronze I"
+                    });
+                }
+
+                const solvedIds = user.problemsSolved.map(id => id.toString());
+
+                if (!solvedIds.includes(problemId.toString())) {
+                    const difficulty = problem.difficulty?.toLowerCase();
+
+                    if (difficulty === "easy") xpGain = 10;
+                    else if (difficulty === "medium") xpGain = 25;
+                    else if (difficulty === "hard") xpGain = 50;
+
+                    user.xp += xpGain;
+                    user.problemsSolved.push(problemId.toString());
+                    user.rank = getRank(user.xp);
+
+                    await user.save();
+                }
+            }
+
+            return res.json({
+                success: true,
+                message: "Accepted",
+                xp: user?.xp,
+                xpGained: xpGain,
+                rank: user?.rank
             });
         }
 
-        let lastOutput = "";
-        let expectedOutput = "";
-
-        // ✅ 🔥 USE BOTH VISIBLE + HIDDEN TEST CASES
+        // ================= BUG MODE =================
         const allTests = [
             ...(problem.testCases || []),
             ...(problem.hiddenTestCases || [])
         ];
 
-        // 🧠 RUN ALL TEST CASES
         for (let test of allTests) {
-            console.log("➡️ Running test:", test);
-
-            let result;
+            let parsedInput = test.input;
 
             try {
-                result = await runCode(
-                    code,
-                    language_id || 63,
-                    test.input
-                );
+                parsedInput = JSON.parse(test.input);
+            } catch {
+                if (!isNaN(test.input)) parsedInput = Number(test.input);
+            }
+
+            let output;
+
+            try {
+                if ((problem.language || "").toLowerCase() === "python") {
+                    output = await runPython(code, parsedInput);
+
+                    try {
+                        output = JSON.parse(output);
+                    } catch {}
+                } else {
+                    const func = new Function(
+                        "input",
+                        `
+                        ${code}
+
+                        if (typeof solution === "function") return solution(input);
+                        if (typeof main === "function") return main(input);
+
+                        throw new Error("No function found");
+                        `
+                    );
+
+                    output = await func(parsedInput);
+                }
+
             } catch (err) {
-                return res.status(500).json({
+                return res.json({
                     success: false,
-                    type: "execution_error",
-                    message: "Execution crashed",
                     error: err.message
                 });
             }
 
-            if (!result) {
-                return res.status(500).json({
-                    success: false,
-                    type: "execution_error",
-                    message: "No result returned"
-                });
-            }
+            let expected = test.output;
 
-            // ❌ RUNTIME ERROR
-            if (result.stderr) {
+            try {
+                expected = JSON.parse(expected);
+            } catch {}
+
+            if (output === undefined || output === null) output = "null";
+            if (expected === undefined || expected === null) expected = "null";
+
+            if (normalize(output) !== normalize(expected)) {
                 return res.json({
                     success: false,
-                    type: "runtime_error",
-                    error: result.stderr
-                });
-            }
-
-            // ✅ COMPARE OUTPUT
-            lastOutput = (result.stdout || "").trim();
-            expectedOutput = String(test.output).trim();
-
-            console.log("EXPECTED:", expectedOutput);
-            console.log("GOT:", lastOutput);
-
-            if (lastOutput !== expectedOutput) {
-                return res.json({
-                    success: false,
-                    type: "wrong_answer",
-                    expected: expectedOutput,
-                    got: lastOutput
+                    expected,
+                    got: output
                 });
             }
         }
 
-        // ✅ ALL TEST CASES PASSED
+        let user = null;
         let xpGain = 0;
 
-        // 🧪 TEST MODE (NO LOGIN)
-        if (!clerkId) {
-            return res.json({
-                success: true,
-                type: "accepted",
-                message: "✅ Correct Answer",
-                xp: 10
-            });
+        if (clerkId) {
+            user = await User.findOne({ clerkId });
+
+            if (!user) {
+                user = new User({
+                    clerkId,
+                    xp: 0,
+                    problemsSolved: [],
+                    highestScore: 0,
+                    rank: "Bronze I"
+                });
+            }
+
+            const solvedIds = user.problemsSolved.map(id => id.toString());
+
+            if (!solvedIds.includes(problemId.toString())) {
+                const difficulty = problem.difficulty?.toLowerCase();
+
+                if (difficulty === "easy") xpGain = 10;
+                else if (difficulty === "medium") xpGain = 25;
+                else if (difficulty === "hard") xpGain = 50;
+
+                user.xp += xpGain;
+                user.problemsSolved.push(problemId.toString());
+                user.rank = getRank(user.xp);
+
+                await user.save();
+            }
         }
-
-        // 👤 USER LOGIC
-        let user = await User.findOne({ clerkId });
-
-        if (!user) {
-            return res.status(404).json({
-                success: false,
-                message: "User not found"
-            });
-        }
-
-        if (problem.difficulty === "easy") xpGain = 10;
-        if (problem.difficulty === "medium") xpGain = 25;
-        if (problem.difficulty === "hard") xpGain = 50;
-
-        user.xp += xpGain;
-        user.problemsSolved += 1;
-        user.streak += 1;
-
-        user.rank = getRank(user.xp);
-        await user.save();
 
         return res.json({
             success: true,
-            type: "accepted",
-            message: "✅ Correct Answer",
-            xpGain,
-            totalXP: user.xp,
-            rank: user.rank
+            message: "Accepted",
+            xp: user?.xp,
+            xpGained: xpGain,
+            rank: user?.rank
         });
 
     } catch (err) {
-        console.error("❌ FINAL ERROR:", err);
-
         return res.status(500).json({
             success: false,
             message: "Submission error",
