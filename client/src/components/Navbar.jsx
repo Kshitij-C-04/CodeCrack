@@ -2,6 +2,7 @@ import { Link, useLocation } from "react-router-dom";
 import { SignedIn, SignedOut, UserButton, useUser } from "@clerk/clerk-react";
 import { useEffect, useState, useCallback } from "react";
 import axios from "axios";
+import API from "../utils/api";
 
 import RankBadge from "./RankBadge";
 
