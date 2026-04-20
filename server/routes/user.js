@@ -4,45 +4,36 @@ import User from "../models/User.js";
 const router = express.Router();
 
 
-// 🔁 SYNC USER (FINAL FIX)
+// 🔁 SYNC USER (FETCH FROM CLERK TOKEN)
 router.post("/sync", async (req, res) => {
     try {
-        // ✅ CORRECT AUTH
-        const { userId } = req.auth();
-        const clerkId = userId;
+        const authData = req.auth?.();
+        const clerkId = authData?.userId;
 
         if (!clerkId) {
             return res.status(401).json({ message: "Unauthorized" });
         }
 
-        console.log("🔥 clerkId:", clerkId);
-        console.log("🔥 BODY:", req.body);
+        const {
+            username,
+            firstName,
+            lastName,
+            email
+        } = req.body || {};
 
-        const { username, firstName, lastName, email } = req.body || {};
+        // ✅ PRIORITY: Clerk username → name → email → fallback
+        let computedUsername =
+            username ||
+            `${firstName || ""} ${lastName || ""}`.trim() ||
+            (email ? email.split("@")[0] : "") ||
+            `User_${clerkId.slice(-5)}`;
 
-        // ✅ FINAL SAFE USERNAME (BULLETPROOF)
-        let computedUsername = "";
-
-        if (typeof username === "string" && username.trim() !== "") {
-            computedUsername = username.trim();
-        } else if (firstName || lastName) {
-            computedUsername = `${firstName || ""} ${lastName || ""}`.trim();
-        } else if (email && email.includes("@")) {
-            computedUsername = email.split("@")[0];
-        } else {
+        if (!computedUsername) {
             computedUsername = `User_${clerkId.slice(-5)}`;
         }
-
-        // 🔥 FORCE FINAL SAFETY (CRITICAL)
-        if (!computedUsername || computedUsername === "undefined") {
-            computedUsername = `User_${clerkId.slice(-5)}`;
-        }
-
-        console.log("🔥 FINAL USERNAME:", computedUsername);
 
         let user = await User.findOne({ clerkId });
 
-        // 🆕 CREATE USER
         if (!user) {
             user = await User.create({
                 clerkId,
@@ -52,29 +43,24 @@ router.post("/sync", async (req, res) => {
                 rank: "Bronze I",
                 highestScore: 0
             });
-
-            console.log("✅ CREATED:", computedUsername);
-        }
-        // 🔁 UPDATE USER (ALWAYS ENSURE CORRECT NAME)
-        else {
-            if (!user.username || user.username !== computedUsername) {
+        } else {
+            // ✅ Always keep username updated from Clerk
+            if (computedUsername && user.username !== computedUsername) {
                 user.username = computedUsername;
                 await user.save();
-
-                console.log("♻️ UPDATED:", computedUsername);
             }
         }
 
         res.json(user);
 
     } catch (err) {
-        console.error("🔥 ERROR:", err);
+        console.error("SYNC ERROR:", err);
         res.status(500).json({ message: err.message });
     }
 });
 
 
-// 🏆 LEADERBOARD (UNCHANGED)
+// 🏆 LEADERBOARD (ALWAYS RETURNS REAL USERS)
 router.get("/leaderboard", async (req, res) => {
     try {
         const users = await User.find()
@@ -82,7 +68,7 @@ router.get("/leaderboard", async (req, res) => {
             .limit(50)
             .select("username xp rank clerkId");
 
-        res.json(users);
+        res.json(users || []);
     } catch (err) {
         console.error("LEADERBOARD ERROR:", err);
         res.status(500).json({ message: "Server error" });
@@ -90,15 +76,16 @@ router.get("/leaderboard", async (req, res) => {
 });
 
 
-// 👤 GET USER (UNCHANGED)
+// 👤 GET USER (AUTO CREATE IF MISSING)
 router.get("/:clerkId", async (req, res) => {
     try {
-        const user = await User.findOne({ clerkId: req.params.clerkId });
+        let user = await User.findOne({ clerkId: req.params.clerkId });
 
+        // 🔥 FIX: auto-create instead of returning "Coder"
         if (!user) {
-            return res.json({
+            user = await User.create({
                 clerkId: req.params.clerkId,
-                username: "Coder",
+                username: `User_${req.params.clerkId.slice(-5)}`,
                 xp: 0,
                 problemsSolved: [],
                 rank: "Bronze I",
