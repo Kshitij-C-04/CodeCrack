@@ -27,19 +27,19 @@ function App() {
     const [showRank, setShowRank] = useState(false);
     const [userData, setUserData] = useState(null);
 
-    const { user } = useUser();
+    const { user, isLoaded } = useUser();
     const { getToken } = useAuth();
 
-    // ✅ USE ENV VARIABLE (NO LOCALHOST)
     const API = process.env.REACT_APP_API_URL;
 
     useEffect(() => {
-        if (!user?.id) return;
+        if (!isLoaded || !user?.id) return;
 
-        const syncUser = async () => {
+        const run = async () => {
             try {
                 const token = await getToken();
 
+                // 🔁 STEP 1: SYNC USER (ENSURE DB ENTRY EXISTS)
                 await axios.post(
                     `${API}/api/users/sync`,
                     {
@@ -55,33 +55,38 @@ function App() {
                     }
                 );
 
-                console.log("✅ User synced");
-            } catch (err) {
-                console.error("SYNC ERROR:", err);
-            }
-        };
-
-        const fetchUser = async () => {
-            try {
+                // 🔁 STEP 2: FETCH USER (AFTER SYNC COMPLETES)
                 const res = await axios.get(
                     `${API}/api/users/${user.id}`
                 );
+
                 setUserData(res.data);
+
+                console.log("✅ User synced & fetched");
+
             } catch (err) {
-                console.error("APP USER FETCH ERROR:", err);
+                console.error("USER INIT ERROR:", err);
             }
         };
 
-        syncUser().then(fetchUser);
+        run();
 
-        const handleXPUpdate = () => fetchUser();
+        const handleXPUpdate = async () => {
+            try {
+                const res = await axios.get(`${API}/api/users/${user.id}`);
+                setUserData(res.data);
+            } catch (err) {
+                console.error("XP UPDATE ERROR:", err);
+            }
+        };
+
         window.addEventListener("xpUpdated", handleXPUpdate);
 
         return () => {
             window.removeEventListener("xpUpdated", handleXPUpdate);
         };
 
-    }, [user?.id, getToken, API]);
+    }, [user?.id, isLoaded, getToken, API]);
 
     return (
         <div className="relative min-h-screen text-slate-200 bg-[#020617]">
@@ -96,7 +101,6 @@ function App() {
                     <Route path="/signup" element={<Signup />} />
                     <Route path="/leaderboard" element={<Leaderboard />} />
 
-                    {/* ✅ Clerk routes */}
                     <Route
                         path="/sign-up/*"
                         element={
@@ -141,7 +145,7 @@ function App() {
                         }
                     />
 
-                    {/* 🔥 IMPORTANT FIX: fallback route */}
+                    {/* 🔥 fallback */}
                     <Route path="*" element={<Home />} />
 
                 </Routes>
