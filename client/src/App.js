@@ -28,17 +28,20 @@ function App() {
     const [userData, setUserData] = useState(null);
 
     const { user } = useUser();
-    const { getToken } = useAuth(); // ✅ FIX
+    const { getToken } = useAuth();
+
+    // ✅ USE ENV VARIABLE (NO LOCALHOST)
+    const API = process.env.REACT_APP_API_URL;
 
     useEffect(() => {
         if (!user?.id) return;
 
         const syncUser = async () => {
             try {
-                const token = await getToken(); // ✅ FIX
+                const token = await getToken();
 
                 await axios.post(
-                    "http://localhost:5000/api/users/sync",
+                    `${API}/api/users/sync`,
                     {
                         username: user?.username,
                         firstName: user?.firstName,
@@ -47,7 +50,7 @@ function App() {
                     },
                     {
                         headers: {
-                            Authorization: `Bearer ${token}` // ✅ FIX
+                            Authorization: `Bearer ${token}`
                         }
                     }
                 );
@@ -61,7 +64,7 @@ function App() {
         const fetchUser = async () => {
             try {
                 const res = await axios.get(
-                    `http://localhost:5000/api/users/${user.id}`
+                    `${API}/api/users/${user.id}`
                 );
                 setUserData(res.data);
             } catch (err) {
@@ -78,7 +81,7 @@ function App() {
             window.removeEventListener("xpUpdated", handleXPUpdate);
         };
 
-    }, [user?.id]);
+    }, [user?.id, getToken, API]);
 
     return (
         <div className="relative min-h-screen text-slate-200 bg-[#020617]">
@@ -93,6 +96,7 @@ function App() {
                     <Route path="/signup" element={<Signup />} />
                     <Route path="/leaderboard" element={<Leaderboard />} />
 
+                    {/* ✅ Clerk routes */}
                     <Route
                         path="/sign-up/*"
                         element={
@@ -137,7 +141,8 @@ function App() {
                         }
                     />
 
-                    <Route path="*" element={<div className="p-6">❌ Page not found</div>} />
+                    {/* 🔥 IMPORTANT FIX: fallback route */}
+                    <Route path="*" element={<Home />} />
 
                 </Routes>
             </div>
