@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 import { useParams, useNavigate } from "react-router-dom";
 import { useUser } from "@clerk/clerk-react";
+import API from "../utils/api";
 
 function ProblemsList() {
     const params = useParams();
@@ -30,7 +31,7 @@ function ProblemsList() {
     const fetchProblems = async () => {
         try {
             const res = await axios.get(
-                `http://localhost:5000/api/problems/${mode}`
+                `${API}/api/problems/${mode}`
             );
             setProblems(res.data || []);
         } catch (err) {
@@ -44,7 +45,7 @@ function ProblemsList() {
 
         try {
             const res = await axios.get(
-                `http://localhost:5000/api/users/${user.id}`
+                `${API}/api/users/${user.id}`
             );
             setUserData(res.data);
         } catch (err) {

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import CodeEditor from "../components/CodeEditor";
+import API from "../utils/api";
 
 function TimedMode() {
     const [started, setStarted] = useState(false);
@@ -37,7 +38,7 @@ function TimedMode() {
             setLoading(true);
             setError("");
 
-            const res = await axios.get("http://localhost:5000/api/problems/random/all");
+            const res = await axios.get(`${API}/api/problems/random/all`);
             const data = res.data;
 
             setProblem(data);

@@ -3,6 +3,7 @@ import axios from "axios";
 import Editor from "@monaco-editor/react";
 import { useParams } from "react-router-dom";
 import { useUser } from "@clerk/clerk-react";
+import API from "../utils/api";
 
 function BugMode() {
     const { id } = useParams();
@@ -26,7 +27,7 @@ function BugMode() {
             if (!id) return;
 
             const res = await axios.get(
-                `http://localhost:5000/api/problems/bug/${id}`
+                `${API}/api/problems/bug/${id}`
             );
 
             if (!res.data) {
@@ -62,7 +63,7 @@ function BugMode() {
             setOutput("Running...");
 
             const res = await axios.post(
-                "http://localhost:5000/api/submission",
+                `${API}/api/submission`,
                 {
                     code,
                     problemId: problem._id,
@@ -100,7 +101,7 @@ function BugMode() {
 
         try {
             const res = await axios.post(
-                "http://localhost:5000/api/submission",
+                `${API}/api/submission`,
                 {
                     code,
                     problemId: problem._id,
@@ -211,7 +212,7 @@ function BugMode() {
                         onClick={async () => {
                             try {
                                 const res = await axios.get(
-                                    "http://localhost:5000/api/problems/bug"
+                                    `${API}/api/problems/bug`
                                 );
 
                                 const list = res.data;

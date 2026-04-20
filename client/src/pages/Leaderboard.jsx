@@ -8,7 +8,7 @@ function Leaderboard() {
 
     const fetchUsers = async () => {
         try {
-            const res = await axios.get("http://localhost:5000/api/users/leaderboard");
+            const res = await axios.get("`${API}/api/users/leaderboard`");
             setUsers(res.data);
         } catch (err) {
             console.error("Leaderboard fetch error:", err);

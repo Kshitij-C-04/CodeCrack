@@ -4,6 +4,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useUser } from "@clerk/clerk-react";
 import CodeEditor from "../components/CodeEditor";
 import XPGainPopup from "../components/XPGainPopup";
+import API from "../utils/api";
 
 function Problem() {
     const { mode, id } = useParams();
@@ -24,7 +25,7 @@ function Problem() {
         const fetchProblem = async () => {
             try {
                 const res = await axios.get(
-                    `http://localhost:5000/api/problems/${mode}/${id}`
+                    `${API}/api/problems/${mode}/${id}`
                 );
 
                 const data = res.data;
@@ -61,7 +62,7 @@ function Problem() {
 
         try {
             const res = await axios.post(
-                "http://localhost:5000/api/submission",
+                `${API}/api/submission`,
                 {
                     code: answer,
                     problemId: problem._id,
@@ -112,7 +113,7 @@ function Problem() {
 
         try {
             const res = await axios.post(
-                "http://localhost:5000/api/submission",
+                `${API}/api/submission`,
                 {
                     code: answer,
                     problemId: problem._id,
@@ -193,7 +194,7 @@ function Problem() {
                     <div className="mt-6">
                         <button
                             onClick={async () => {
-                                const res = await axios.get(`http://localhost:5000/api/problems/${mode}`);
+                                const res = await axios.get(`${API}/api/problems/${mode}`);
                                 const list = res.data || [];
                                 const i = list.findIndex(p => p._id === problem._id);
                                 const next = list[i + 1] || list[0];
@@ -288,7 +289,7 @@ function Problem() {
                 <div className="mt-6">
                     <button
                         onClick={async () => {
-                            const res = await axios.get(`http://localhost:5000/api/problems/${mode}`);
+                            const res = await axios.get(`${API}/api/problems/${mode}`);
                             const list = res.data || [];
                             const i = list.findIndex(p => p._id === problem._id);
                             const next = list[i + 1] || list[0];
